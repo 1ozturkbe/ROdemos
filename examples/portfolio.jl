@@ -16,6 +16,8 @@
 using JuMP, JuMPeR  # Modeling
 using Distributions, Random  # For generating data
 using LinearAlgebra
+using Gurobi
+using Printf # for pretty printing.
 
 # Number of stocks
 const NUM_ASSET = 10
@@ -76,7 +78,7 @@ which is controlled by the global flag UNCERTAINY_SET.
 """
 function solve_portfolio(past_returns, Γ)
     # Setup the robust optimization model
-    m = RobustModel()
+    m = RobustModel(solver = GurobiSolver())
     # Each asset is a share of the money to invest...
     @variable(m, 0 <= x[1:NUM_ASSET] <= 1)
     # ... and we must allocate all the money.
@@ -89,9 +91,9 @@ function solve_portfolio(past_returns, Γ)
     # The uncertain parameters are the returns for each asset
     @uncertain(m, r[1:NUM_ASSET])
     # The uncertainty set requires the "square root" of the covariance
-    μ = vec(mean(past_returns, 1))  # Want a column vector
+    μ = vec(mean.(past_returns[:,i] for i=1:size(past_returns,2)))  # Want a column vector
     Σ = cov(past_returns)
-    L = full(chol(Σ, Val{:L}))  # Σ^½
+    L = Matrix(cholesky(Σ))  # Σ^½
     # Define auxiliary uncertain parameters to model the underlying factors
     @uncertain(m, z[1:NUM_ASSET])
     # Link r with z
@@ -140,7 +142,7 @@ function solve_and_simulate()
         mean_z   = mean(future_z)*100
         max_z    = future_z[end]*100
         support  = sum(portfolios[Γ] .> 0.01)  # Number of assets used in portfolio
-        printf(" %4.1f | %6.2f | %6.2f | %6.2f | %6.2f | %6.2f | %7d\n",
+        @printf(" %4.1f | %6.2f | %6.2f | %6.2f | %6.2f | %6.2f | %7d\n",
                     Γ, min_z, ten_z, twenty_z, mean_z, max_z, support)
     end
 end

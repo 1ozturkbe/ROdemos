@@ -20,7 +20,7 @@
 # Requires a mixed-integer linear optimization problem solver.
 #-----------------------------------------------------------------------
 
-using JuMP, JuMPeR, LinearAlgebra
+using JuMP, JuMPeR, LinearAlgebra, Random
 
 """
     TreeScenario
