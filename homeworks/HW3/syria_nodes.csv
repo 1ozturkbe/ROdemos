@@ -1,0 +1,16 @@
+﻿Name,Type,Demand,Country
+Gaziantep,I,,Turkey
+Beirut,I,,Lebanon
+Amman,I,,Jordan
+Ar Raqqa,D,10000,Syrian Arab Republic
+Hassakeh,L,10000,Syrian Arab Republic
+Dara,L,20000,Syrian Arab Republic
+Dayr_Az_Zor,L,25000,Syrian Arab Republic
+Qamishli,L,5000,Syrian Arab Republic
+Homs,R,,Syrian Arab Republic
+Damascus,R,,Syrian Arab Republic
+Aleppo,R,,Syrian Arab Republic
+Jubb al-Jarrah,D,2000,Syrian Arab Republic
+Idleb,D,5000,Syrian Arab Republic
+As_Suweida,R,,Syrian Arab Republic
+Hama,R,,Syrian Arab Republic
