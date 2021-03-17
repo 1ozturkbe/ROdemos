@@ -65,7 +65,7 @@ procurement_links = unique([row.A => row.Food for row in eachrow(pc)])       # a
 
 # Total procurement cost
 @variable(m, procurement_cost >= 0)
-@constraint(m, procurement_cost >= sum(r[:Price] * procurement[r.A, r.Food] for r in eachrow(pc)))
+@constraint(m, procurement_cost == sum(r[:Price] * procurement[r.A, r.Food] for r in eachrow(pc)))
 
 # Transportation
 transportation_links = unique([row.A => row.B for row in eachrow(hc)]) # all possible edges
@@ -76,7 +76,7 @@ for r in eachrow(hc) # Linking transportation cost to total food transported on 
 end
 # Total transportation cost
 @variable(m, transportation_cost >= 0)
-@constraint(m, transportation_cost >= sum(r.tCost * transportation[r.A, r.B] for r in eachrow(hc)))
+@constraint(m, transportation_cost == sum(r.tCost * transportation[r.A, r.B] for r in eachrow(hc)))
 
 # Flow constraints
 for node in N
@@ -110,6 +110,14 @@ for node in N_D
         @constraint(m, 1000*delivery[node, commodity] >= dem[node] * ration_pp[commodity])
     end
 end
+
+# Diet constraints
+# Achieving a greater than 4:1 ratio by mass of carbohydrates to protein, and a greater than 4:1 ratio by mass of carbohydrates to fats
+# for the same total energy intake. The energy stored in a gram of carbohydrate, protein and fat are 4kcal/g, 4kcal/g and 9kcal/g respectively. 
+@variable(m, carbs_pp >= 0)
+@constraint(m, 4*carbs_pp == nutrients_pp["Energy(kcal)"] - 4*nutrients_pp["Protein(g)"] - 9*nutrients_pp["Fat(g)"])
+@constraint(m, carbs_pp >= 4*nutrients_pp["Protein(g)"])
+@constraint(m, carbs_pp >= 4*nutrients_pp["Fat(g)"])  
 
 # Setting objectives
 @objective(m, Min, procurement_cost + transportation_cost)
