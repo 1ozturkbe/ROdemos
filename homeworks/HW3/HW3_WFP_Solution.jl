@@ -57,9 +57,10 @@ nutrients = String.(propertynames(foodreqs))
 foodreqs = Dict(string(pptname) => foodreqs[1, pptname] for pptname in propertynames(foodreqs))
 
 
-function WFP_model(slack::Union{Nothing, Real} = 1, pof::Union{Nothing, Real} = 0.5)
+function WFP_model(slack::Union{Nothing, Real} = 1, pof::Real = 0.5)
     # FINALLY CREATING THE MODEL
     m = Model(solver = GurobiSolver())
+    m[:pof] = pof
     normalquant = quantile(Normal(0,1), pof)
 
     # Procurement and delivery
@@ -128,7 +129,7 @@ function WFP_model(slack::Union{Nothing, Real} = 1, pof::Union{Nothing, Real} = 
         @constraint(m, nutrient_slack == slack)
     end
     for nutrient in nutrients # Note the factor of 10 for conversion of 100g to kg (since rations are in kg/pp)
-        @constraint(m, nutrients_pp[nutrient] <= 10 * sum(ration_pp[commodity] * fooddata[commodity][nutrient] for commodity in commodities))
+        @constraint(m, nutrients_pp[nutrient] == 10 * sum(ration_pp[commodity] * fooddata[commodity][nutrient] for commodity in commodities))
         @constraint(m, nutrients_pp[nutrient] >= nutrient_slack * foodreqs[nutrient])
     end
     for node in N_D
@@ -151,7 +152,8 @@ function WFP_model(slack::Union{Nothing, Real} = 1, pof::Union{Nothing, Real} = 
 end
 
 function report_results(m)
-    return DataFrame("TotalCost" => round(getvalue(m[:procurement_cost] + m[:transportation_cost]), sigdigits = 5),
+    return DataFrame("PP" => m[:pof],
+                     "TotalCost" => round(getvalue(m[:procurement_cost] + m[:transportation_cost]), sigdigits = 5),
                      "Proc/Total" => round(getvalue(m[:procurement_cost]) / getvalue(m[:procurement_cost] + m[:transportation_cost]), sigdigits=3),
                      "Trans/Total" => round(getvalue(m[:transportation_cost]) / getvalue(m[:procurement_cost] + m[:transportation_cost]), sigdigits=3),
                      "Intl/TotalProc" => round(getvalue(m[:international_p_costs]) / getvalue(m[:procurement_cost]), sigdigits=3), 
@@ -176,30 +178,25 @@ nm = WFP_model(nothing, 0.5)
 solve(nm);
 report_results(nm)
 
-# Robust solutions
-pofs = [50, 75, 85, 90, 92, 95, 96, 97, 98, 99, 99.5]./100
+# Robust solutions with a budget limit
+pofs = [75, 85, 90, 92, 95, 96, 97, 98, 99, 99.5]./100
 robustdata_lim = report_results(nm)
-insert!(robustdata_lim, 1, [0.5], :PoF)
 for pof in pofs
     m_lim = WFP_model(nothing, pof)
     @constraint(m_lim, m_lim[:procurement_cost] + m_lim[:transportation_cost] <= 6000)
     @objective(m_lim, Max, m_lim[:nutrient_slack])
     solve(m_lim);
     df = report_results(m_lim)
-    insert!(df, 1, [pof], :PoF)
     append!(robustdata_lim, df)
 end
 
-# How about with no budget limit? 
+# Robust solutions without a budget limit
 m_unlim = WFP_model(1)
 solve(m_unlim);
-report_results(m_unlim)
 robustdata_unlim = report_results(m_unlim)
-insert!(robustdata_unlim, 1, [0.5], :PoF)
 for pof in pofs
     m_unlim = WFP_model(1, pof)
     solve(m_unlim);
     df = report_results(m_unlim)
-    insert!(df, 1, [pof], :PoF)
     append!(robustdata_unlim, df)
 end
