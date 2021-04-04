@@ -1,15 +1,20 @@
 using JuMP, JuMPeR, Gurobi, Random, Distributions, LinearAlgebra, DataFrames, Plots
 
-n = 10 # Possible facility locations
-m = 200 # Number of customers
+n = 6 # Number of facilities
+m = 30 # Number of customers
 
 # Generating random data (please don't change the seeds.)
-facilities = rand(MersenneTwister(314), n,2);
+facilities = 0.6.*rand(MersenneTwister(314), n,2) .+ 0.2;
 customers = rand(MersenneTwister(2), m, 2); 
 c = [LinearAlgebra.norm(customers[i, :] .- facilities[j, :])[1] for j=1:n, i=1:m];
-f = rand(MersenneTwister(3), n)*10 .+ 10;
-s = rand(MersenneTwister(4), n)*10 .+ 20;
+f = rand(MersenneTwister(3), n)*1 .+ 5;
+s = rand(MersenneTwister(4), n)*2 .+ 10;
 d = rand(MersenneTwister(5), m)
+
+# P matrix
+R_D = 0.25
+P = [0.2*exp(-1/R_D .*LinearAlgebra.norm(customers[i, :] .- customers[j, :])[1]) for j=1:m, i=1:m];
+P = (P .>= 0.2*exp(-1/R_D .* R_D)) .* P
 
 """ Nominal facility location model. """
 function facility_model(c::Matrix, f::Vector)
