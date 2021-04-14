@@ -11,11 +11,6 @@ f = rand(MersenneTwister(3), n)*1 .+ 5;
 s = rand(MersenneTwister(4), n)*2 .+ 15;
 d = rand(MersenneTwister(5), m)*0.5 .+ 0.75
 
-# P matrix
-R_D = 0.25
-P = [0.2*exp(-1/R_D .*LinearAlgebra.norm(customers[i, :] .- customers[j, :])[1]) for j=1:m, i=1:m];
-P = (P .>= 0.2*exp(-1/R_D .* R_D)) .* P 
-
 """ Nominal facility location model. """
 function facility_model(c::Matrix, f::Vector)
     n, m = size(c) 
