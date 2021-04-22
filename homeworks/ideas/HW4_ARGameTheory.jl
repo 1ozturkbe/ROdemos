@@ -44,6 +44,7 @@ function invididual_game(ind=1)
     solve(m)
     println("Max-min return, fixed move: $(getvalue(move)) with payoff $(getvalue(payoff)).")
 
+    # Adaptive strategy
     m = Model(solver = GurobiSolver());
     @variable(m, 0 <= move <= 1);
     @variable(m, strat[1:n_players-1])
@@ -51,8 +52,11 @@ function invididual_game(ind=1)
     @variable(m, 0 <= opp_moves[1:n_players-1] <= 1)
     @constraint(m, move == dot(strat, opp_moves) + strat0)
     @variable(m, payoff >= 0);
-    @constraint(m, payoff <= )
-    @objective(m, Max, payoff)
+    @variable(m, zero_payoffs[1:n_players-1] >= 0)
+    @variable(m, one_payoffs[1:n_players-1] >= 0)
+    @constraint(m, zero_payoffs .<= opp_moves' * payoffM[ind][:,:,1] * opp_moves)
+    @constraint(m, one_payoffs .<= payoffM[ind][:,:,2] * opp_moves)
+    @objective(m, Max, sum(zero_payoffs) + sum(one_payoffs))
     
 
 
