@@ -57,5 +57,3 @@ model, x, y = facility_model(c, f)
 solve(model)
 
 plt = plot_solution(model, x, y)
-
-@show plt
