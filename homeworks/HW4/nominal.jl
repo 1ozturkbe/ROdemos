@@ -1,4 +1,9 @@
-using JuMP, JuMPeR, Gurobi, Random, Distributions, LinearAlgebra, DataFrames, Plots
+# Activating Julia environment
+using Pkg
+Pkg.activate(".")
+
+# Packages
+using JuMP, Gurobi, Random, Distributions, LinearAlgebra, DataFrames, Plots
 
 n = 10 # Number of facilities
 m = 50 # Number of customers
@@ -15,7 +20,7 @@ d = rand(MersenneTwister(5), m)*0.5 .+ 0.75
 function facility_model(c::Matrix, f::Vector)
     n, m = size(c) 
     @assert length(f) == n
-    model = Model(solver = GurobiSolver())
+    model = Model(Gurobi.Optimizer)
 
     # VARIABLES
     @variable(model, x[1:n], Bin)      # Facility locations
@@ -35,25 +40,25 @@ Orange plus signs are other potential facility locations.
 Rays describe connections between facilities and demand nodes. 
 """
 function plot_solution(model, x, y)
-    plt = scatter(facilities[:, 1], facilities[:, 2], markersize = 0.4 .* s .* getvalue(x))
+    plt = scatter(facilities[:, 1], facilities[:, 2], markersize = 0.4 .* s .* value.(x))
     scatter!(facilities[:, 1], facilities[:, 2], markersize = 0.4 .* s, markershape = :+)
     for i=1:n
         for j=1:m
-            if getvalue(y[i,j]) >= 1e-10
-                plot!([customers[j, 1], facilities[i,1]], [customers[j,2], facilities[i,2]], linewidth = getvalue(y[i,j]), legend=false)
+            if value(y[i,j]) >= 1e-10
+                plot!([customers[j, 1], facilities[i,1]], [customers[j,2], facilities[i,2]], linewidth = value(y[i,j]), legend=false)
         
             end
         end
     end
     scatter!(customers[:, 1], customers[:, 2], markersize = 3*d, 
             title = "Total cost: $(round(getobjectivevalue(model), sigdigits=5))")
-    println("Facility cost: $(getvalue(sum(f[j] * x[j] for j = 1:n)))")
-    println("Transportation cost: $(getvalue(sum(c[i, j] * y[i, j] for i=1:n, j=1:m)))")
+    println("Facility cost: $(value(sum(f[j] * x[j] for j = 1:n)))")
+    println("Transportation cost: $(value(sum(c[i, j] * y[i, j] for i=1:n, j=1:m)))")
     return plt
 end
 
 model, x, y = facility_model(c, f)
 
-solve(model)
+optimize!(model)
 
 plt = plot_solution(model, x, y)
