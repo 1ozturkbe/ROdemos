@@ -1,4 +1,11 @@
-using JuMP, JuMPeR, Gurobi, Random, Distributions, LinearAlgebra, Plots
+# Activating Julia environment
+using Pkg
+Pkg.activate(".")
+import Pkg
+Pkg.add(Pkg.PackageSpec(name = "CPLEX", version = v"0.6"))
+
+# Packages
+using JuMP, JuMPeR, CPLEX, Random, Distributions, LinearAlgebra, Plots
 
 T = 25
 S = 5
@@ -41,7 +48,7 @@ C = [0.4, 0.5, 0.6, 0.7, 0.8, 0.7]; # reallocation costs
 #         title = "Costs for each resource")
 
 # OPTIMIZATION MODEL HERE.
-m = RobustModel(solver = GurobiSolver())
+m = RobustModel(solver = CPLEX.Optimizer)
 Γ = 0
 # Γ = sqrt(2log(1/0.05))*sqrt(I*T)
 @variable(m, r[i=1:I, s=1:S] >= 0)

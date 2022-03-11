@@ -1,4 +1,10 @@
-using JuMP, JuMPeR, Gurobi, Random, Distributions, LinearAlgebra, Plots, StatsPlots
+# Activating Julia environment
+using Pkg
+Pkg.activate(".")
+Pkg.add(Pkg.PackageSpec(name = "Gurobi", version = v"0.8.1"))
+
+# Packages
+using JuMPeR, JuMP, Gurobi, Random, Distributions, LinearAlgebra, Plots, StatsPlots
 
 T = 25
 S = 5
