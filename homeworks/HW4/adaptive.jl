@@ -3,7 +3,7 @@ using Pkg
 Pkg.activate(".")
 
 # Packages
-using JuMP, JuMPeR, Gurobi, Random, Distributions, LinearAlgebra, DataFrames, Plots
+using JuMP, Gurobi, Random, Distributions, LinearAlgebra, DataFrames, Plots
 
 n = 10 # Number of facilities
 m = 50 # Number of customers
@@ -27,7 +27,7 @@ P = (P .>= 0.2*exp(-1/R_D .* R_D)) .* P
 function adaptive_facility_model(c::Matrix, f::Vector, rho::Real, Gamm::Real)
     n, m = size(c) 
     @assert length(f) == n
-    model = Model(solver = GurobiSolver())
+    model = Model(Gurobi.Optimizer)
 
     # VARIABLES 
     @variable(model, x[1:n], Bin)           # Facility locations
@@ -106,7 +106,7 @@ function plot_solution(model, x, y, cost = nothing)
     end
     if cost == nothing
         scatter!(customers[:, 1], customers[:, 2], markersize = 3*d, 
-                title = "Total cost: $(round(getobjectivevalue(model), sigdigits=5))")
+                title = "Total cost: $(round(objective_value(model), sigdigits=5))")
     else
         scatter!(customers[:, 1], customers[:, 2], markersize = 3*d, 
         title = "Total cost: $(round(cost,sigdigits=5))")
@@ -120,6 +120,6 @@ end
 rho = 1
 Gamm = 5
 model, x, u, V = adaptive_facility_model(c, f, rho, Gamm)
-@time solve(model)
+@time optimize!(model)
 plt = plot_solution(model, x, u)
 @show plt
