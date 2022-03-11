@@ -1,4 +1,11 @@
-using JuMP, JuMPeR, Gurobi, Random, Distributions, LinearAlgebra, DataFrames, Plots
+# Activating Julia environment
+using Pkg
+Pkg.activate(".")
+
+# Packages
+using JuMP, Gurobi, Random, Distributions, LinearAlgebra, DataFrames, Plots
+# GUROBI_SILENT = with_optimizer(Gurobi.Optimizer, OutputFlag = 0, Gurobi.Env())
+GUROBI_SILENT = Gurobi.Optimizer
 
 n = 10 # Number of facilities
 m = 50 # Number of customers
@@ -21,7 +28,7 @@ P = (P .>= 0.2*exp(-1/R_D .* R_D)) .* P
 function CP_facility_model(c::Matrix, f::Vector)
     n, m = size(c) 
     @assert length(f) == n
-    model = Model(solver = GurobiSolver(OutputFlag = 0))
+    model = Model(GUROBI_SILENT)
 
     # VARIABLES
     @variable(model, x[1:n], Bin)     # Facility locations
@@ -54,57 +61,64 @@ end
 
 """ Finds and adds worst case cuts for the facility location problem. """
 function find_wc_cuts(model, x, u, V, xvals, uvals, Vvals, rho, Gamm)
-    wc_model = Model(solver = GurobiSolver(OutputFlag = 0)) # suppressing printouts.
+    obj_value = objective_value(model)
+    wc_model = Model(GUROBI_SILENT) # suppressing printouts.
     @variable(wc_model, -rho <= z[1:m] <= rho)
     @variable(wc_model, normdummy[1:m] >= 0)
     @constraint(wc_model, [i=1:m], normdummy[i] >= z[i])
     @constraint(wc_model, [i=1:m], normdummy[i] >= -z[i])
     @constraint(wc_model, sum(normdummy) <= Gamm)
     
-    count = length(model.linconstr)
+    count = 0
     for i = 1:n # nonnegativity constraints
         for j=1:m
             @objective(wc_model, Min, uvals[i,j] + sum(Vvals[i,j,:] .* z))
-            solve(wc_model)
-            if getobjectivevalue(wc_model) < -1e-5 # if constraint is violated
-                new_z = getvalue(z)
+            optimize!(wc_model)
+            if objective_value(wc_model) < -1e-5 # if constraint is violated
+                new_z = value.(z)
                 @constraint(model, u[i,j] + sum(V[i,j,:] .* new_z) >= 0)
+                count += 1
             end
         end
     end
-    @info("$(length(model.linconstr) - count) nonnegativity cuts added. ")
-    count = length(model.linconstr)
+    @info("$(count) nonnegativity cuts added. ")
+    ct = count
     for j = 1:m # demand constraints
         dt = zeros(n, m);
         [dt[i,j] = 1 for i=1:n];
         @objective(wc_model, Min, sum(dt .* uvals) + sum(Vvals[:,j,:] * z) - d[j] - (P*z)[j])
-        solve(wc_model)
-        if getobjectivevalue(wc_model) < -1e-5 # if constraint is violated
-            new_z = getvalue(z)
+        optimize!(wc_model)
+        if objective_value(wc_model) < -1e-5 # if constraint is violated
+            new_z = value.(z)
             @constraint(model, sum(dt .* u) + sum(V[:,j,:] * new_z) >= d[j] + (P*new_z)[j])
+            count += 1
         end
     end
-    @info("$(length(model.linconstr) - count) demand constraint cuts added.")
-    count = length(model.linconstr)
+    @info("$(count - ct) demand constraint cuts added.")
+    ct = count
     for i = 1:n # capacity constraints
         dt = zeros(n, m);
         [dt[i,j] = 1 for j=1:m];
         @objective(wc_model, Min, - sum(dt .* uvals) - sum(Vvals[i,:,:] * z) + s[i] * xvals[i])
-        solve(wc_model)
-        if getobjectivevalue(wc_model) < -1e-5 # if constraint is violated
-            new_z = getvalue(z)
+        optimize!(wc_model)
+        if objective_value(wc_model) < -1e-5 # if constraint is violated
+            new_z = value.(z)
             @constraint(model, sum(dt .* u) + sum(V[i,:,:] * new_z) <= s[i] * x[i])
+            count += 1
         end
     end
-    @info("$(length(model.linconstr) - count) capacity constraint cuts added.")
+    @info("$(count - ct) capacity constraint cuts added.")
+    ct = count
     # objective
     @objective(wc_model, Max, sum(f[j] * xvals[j] for j = 1:n) + sum(c[i, j] * (uvals[i, j] + sum(Vvals[i,j,:] .* z)) for i=1:n, j=1:m))
-    solve(wc_model)
-    if getobjectivevalue(wc_model) > getvalue(model.obj) + 1e-5 # if constraint is violated
-        new_z = getvalue(z)
-        @constraint(model, model.obj >= sum(f[j] * x[j] for j = 1:n) + sum(c[i, j] * (u[i, j] + sum(V[i,j,:] .* new_z)) for i=1:n, j=1:m))
+    optimize!(wc_model)
+    if objective_value(wc_model) > obj_value + 1e-5 # if constraint is violated
+        new_z = value.(z)
+        @constraint(model, objective_function(model) >= sum(f[j] * x[j] for j = 1:n) + sum(c[i, j] * (u[i, j] + sum(V[i,j,:] .* new_z)) for i=1:n, j=1:m))
+        count += 1
         @info("Objective cut added.")
     end
+    return count
 end
 
 """ Plots the solution of the facility location model. 
@@ -113,25 +127,24 @@ Orange plus signs are other potential facility locations.
 Rays describe connections between facilities and demand nodes. 
 """
 function plot_solution(model, x, y, cost = nothing)
-    plt = scatter(facilities[:, 1], facilities[:, 2], markersize = 0.4 .* s .* getvalue(x))
+    plt = scatter(facilities[:, 1], facilities[:, 2], markersize = 0.4 .* s .* value.(x))
     scatter!(facilities[:, 1], facilities[:, 2], markersize = 0.4 .* s, markershape = :+)
     for i=1:n
         for j=1:m
-            if getvalue(y[i,j]) >= 1e-10
-                plot!([customers[j, 1], facilities[i,1]], [customers[j,2], facilities[i,2]], linewidth = getvalue(y[i,j]), legend=false)
-        
+            if value(y[i,j]) >= 1e-10
+                plot!([customers[j, 1], facilities[i,1]], [customers[j,2], facilities[i,2]], linewidth = value(y[i,j]), legend=false)
             end
         end
     end
     if cost == nothing
         scatter!(customers[:, 1], customers[:, 2], markersize = 3*d, 
-                title = "Total cost: $(round(getobjectivevalue(model), sigdigits=5))")
+                title = "Total cost: $(round(objective_value(model), sigdigits=5))")
     else
         scatter!(customers[:, 1], customers[:, 2], markersize = 3*d, 
         title = "Total cost: $(round(cost,sigdigits=5))")
     end
-    println("Facility cost: $(getvalue(sum(f[j] * x[j] for j = 1:n)))")
-    println("Transportation cost: $(getvalue(sum(c[i, j] * y[i, j] for i=1:n, j=1:m)))")
+    println("Facility cost: $(value(sum(f[j] * x[j] for j = 1:n)))")
+    println("Transportation cost: $(value(sum(c[i, j] * y[i, j] for i=1:n, j=1:m)))")
     return plt
 end
 
@@ -139,19 +152,19 @@ rho = 1
 Gamm = 5
 model, x, u, V = CP_facility_model(c, f)
 apply_heuristic(model, x, u, V)
+optimize!(model)
 
-# Do 15 iterations of cuts
-for i=1:15
+# Do 5 iterations of cuts
+for i=1:5
     @info("Iteration $(i).")
-    modelsize = length(model.linconstr)
-    solve(model)
-    xvals, uvals, Vvals = getvalue(x), getvalue(u), getvalue(V)
-    find_wc_cuts(model, x, u, V, xvals, uvals, Vvals , rho, Gamm)
-    if length(model.linconstr) == modelsize
+    xvals, uvals, Vvals = value.(x), value.(u), value.(V)
+    count = find_wc_cuts(model, x, u, V, xvals, uvals, Vvals , rho, Gamm)
+    if count == 0
         @info("Optimum reached.")
-        @info("Optimal cost:$(getobjectivevalue(model)).")
+        @info("Optimal cost:$(objective_value(model)).")
         break
     end
+    optimize!(model)
 end
 
 # Problem should converge in ~100 adversarial iterations. 

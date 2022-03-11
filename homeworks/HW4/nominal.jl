@@ -51,7 +51,7 @@ function plot_solution(model, x, y)
         end
     end
     scatter!(customers[:, 1], customers[:, 2], markersize = 3*d, 
-            title = "Total cost: $(round(getobjectivevalue(model), sigdigits=5))")
+            title = "Total cost: $(round(objective_value(model), sigdigits=5))")
     println("Facility cost: $(value(sum(f[j] * x[j] for j = 1:n)))")
     println("Transportation cost: $(value(sum(c[i, j] * y[i, j] for i=1:n, j=1:m)))")
     return plt
