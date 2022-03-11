@@ -1,4 +1,9 @@
-using JuMP, JuMPeR, Gurobi, Random, Distributions, LinearAlgebra, Plots, CSV, DataFrames
+# Activating Julia environment
+using Pkg
+Pkg.activate(".")
+
+# Packages
+using JuMP, Gurobi, Random, Distributions, LinearAlgebra, CSV, DataFrames
 
 # CRUNCHING THE DATA
 # NODES (I = International supplier; R = Regional supplier; L = Local market (both supply and deliver); D = delivery point)
@@ -8,7 +13,7 @@ N_R = []     # set of regional suppliers
 N_L = []     # set of local markets
 N_D = []     # delivery points
 dem = Dict() # set of demands
-file = CSV.File("homeworks/HW3/syria_nodes.csv")
+file = CSV.File("syria_nodes.csv")
 for row in file
     push!(N, row.Name)
     if !ismissing(row.Demand)
@@ -28,10 +33,10 @@ for row in file
 end
 
 # EDGES
-hc = DataFrame(CSV.File("homeworks/HW3/syria_edges.csv"))
+hc = DataFrame(CSV.File("syria_edges.csv"))
 
 # FOOD NUTRITION AND INTERNATIONAL COSTS
-fooddata = DataFrame(CSV.File("homeworks/HW3/syria_foodnutrition.csv"))
+fooddata = DataFrame(CSV.File("syria_foodnutrition.csv"))
 intfoodcosts = select(fooddata, [:Food, :InternationalPrice])
 commodities = sort(Array(intfoodcosts.Food)) # Commodities
 select!(fooddata, Not([14,15]))
@@ -39,7 +44,8 @@ fooddata = Dict(fooddata.Food .=> eachrow(fooddata))
 # Note: fooddata contains the nutrients provided by 100g of a commodity!
 
 # FOOD COST ($/metric ton for regional suppliers)
-pc = DataFrame(CSV.File("homeworks/HW3/syria_foodcost.csv"))
+pc = DataFrame(CSV.File("syria_foodcost.csv"))
+pc.Food = convert.(String63, pc.Food)
 for int_supply_node in N_I # adding international prices to pc for easier processing
     for row in eachrow(intfoodcosts)
         append!(pc, DataFrame(:A => N_I, :Food => row.Food, :Price => row.InternationalPrice))
@@ -50,13 +56,13 @@ international_items = DataFrame([r for r in eachrow(pc) if r.A in N_I])
 regional_items =  DataFrame([r for r in eachrow(pc) if r.A in N_R])
 
 # FOOD REQUIREMENTS (avg. per person per day)
-foodreqs = DataFrame(CSV.File("homeworks/HW3/syria_foodreq.csv"))
+foodreqs = DataFrame(CSV.File("syria_foodreq.csv"))
 select!(foodreqs, Not(:Type))
 nutrients = String.(propertynames(foodreqs))
 foodreqs = Dict(string(pptname) => foodreqs[1, pptname] for pptname in propertynames(foodreqs))
 
 # FINALLY CREATING THE MODEL
-m = Model(solver = GurobiSolver())
+m = Model(Gurobi.Optimizer)
 
 # Procurement and delivery
 procurement_links = unique([row.A => row.Food for row in eachrow(pc)])       # all places where we can procure food
@@ -123,4 +129,4 @@ end
 @objective(m, Min, procurement_cost + transportation_cost)
 
 # Solving
-solve(m)
+optimize!(m)
