@@ -4,8 +4,6 @@ Pkg.activate(".")
 
 # Packages
 using JuMP, Gurobi, Random, Distributions, LinearAlgebra, DataFrames, Plots
-# GUROBI_SILENT = with_optimizer(Gurobi.Optimizer, OutputFlag = 0, Gurobi.Env())
-GUROBI_SILENT = Gurobi.Optimizer
 
 n = 10 # Number of facilities
 m = 50 # Number of customers
@@ -28,7 +26,7 @@ P = (P .>= 0.2*exp(-1/R_D .* R_D)) .* P
 function CP_facility_model(c::Matrix, f::Vector)
     n, m = size(c) 
     @assert length(f) == n
-    model = Model(GUROBI_SILENT)
+    model = Model(Gurobi.Optimizer)
 
     # VARIABLES
     @variable(model, x[1:n], Bin)     # Facility locations
@@ -62,7 +60,8 @@ end
 """ Finds and adds worst case cuts for the facility location problem. """
 function find_wc_cuts(model, x, u, V, xvals, uvals, Vvals, rho, Gamm)
     obj_value = objective_value(model)
-    wc_model = Model(GUROBI_SILENT) # suppressing printouts.
+    wc_model = Model(Gurobi.Optimizer)
+    set_optimizer_attribute(wc_model, "OutputFlag", 0) # suppressing printouts.
     @variable(wc_model, -rho <= z[1:m] <= rho)
     @variable(wc_model, normdummy[1:m] >= 0)
     @constraint(wc_model, [i=1:m], normdummy[i] >= z[i])
@@ -154,11 +153,12 @@ model, x, u, V = CP_facility_model(c, f)
 apply_heuristic(model, x, u, V)
 optimize!(model)
 
-# Do 5 iterations of cuts
-for i=1:5
+# Do 15 iterations of cuts
+for i=1:15
     @info("Iteration $(i).")
     xvals, uvals, Vvals = value.(x), value.(u), value.(V)
     count = find_wc_cuts(model, x, u, V, xvals, uvals, Vvals , rho, Gamm)
+    set_start_value.(x, xvals) # Warmstarts
     if count == 0
         @info("Optimum reached.")
         @info("Optimal cost:$(objective_value(model)).")
