@@ -1,4 +1,9 @@
-using JuMP, JuMPeR, Gurobi, Random, Distributions, LinearAlgebra, DataFrames, Plots
+# Activating Julia environment
+using Pkg
+Pkg.activate(".")
+
+# Packages
+using JuMP, Gurobi, Random, Distributions, LinearAlgebra, DataFrames, Plots
 
 n = 10 # Number of facilities
 m = 50 # Number of customers
@@ -112,25 +117,25 @@ Orange plus signs are other potential facility locations.
 Rays describe connections between facilities and demand nodes. 
 """
 function plot_solution(model, x, y, cost = nothing)
-    plt = scatter(facilities[:, 1], facilities[:, 2], markersize = 0.4 .* s .* getvalue(x))
+    plt = scatter(facilities[:, 1], facilities[:, 2], markersize = 0.4 .* s .* value.(x))
     scatter!(facilities[:, 1], facilities[:, 2], markersize = 0.4 .* s, markershape = :+)
     for i=1:n
         for j=1:m
-            if getvalue(y[i,j]) >= 1e-10
-                plot!([customers[j, 1], facilities[i,1]], [customers[j,2], facilities[i,2]], linewidth = getvalue(y[i,j]), legend=false)
+            if value(y[i,j]) >= 1e-10
+                plot!([customers[j, 1], facilities[i,1]], [customers[j,2], facilities[i,2]], linewidth = value(y[i,j]), legend=false)
         
             end
         end
     end
     if cost == nothing
         scatter!(customers[:, 1], customers[:, 2], markersize = 3*d, 
-                title = "Total cost: $(round(getobjectivevalue(model), sigdigits=5))")
+                title = "Total cost: $(round(objective_value(model), sigdigits=5))")
     else
         scatter!(customers[:, 1], customers[:, 2], markersize = 3*d, 
         title = "Total cost: $(round(cost,sigdigits=5))")
     end
-    println("Facility cost: $(getvalue(sum(f[j] * x[j] for j = 1:n)))")
-    println("Transportation cost: $(getvalue(sum(c[i, j] * y[i, j] for i=1:n, j=1:m)))")
+    println("Facility cost: $(value(sum(f[j] * x[j] for j = 1:n)))")
+    println("Transportation cost: $(value(sum(c[i, j] * y[i, j] for i=1:n, j=1:m)))")
     return plt
 end
 
@@ -158,7 +163,7 @@ function iterate_adaptive_model(c, f, rho, Gamm)
             @constraint(model, x[int] == 1)
         end
         solve(model)
-        xvals = getvalue(x)
+        xvals = value(x)
         nonint = [!(var in [0,1]) for var in xvals] 
         if sum(nonint) == 0
             return model, x, y, ints
@@ -172,7 +177,7 @@ end
 model, x, y, ints = iterate_adaptive_model(c, f, rho, Gamm)
 
 # Plot generation for adaptive solution (3.4 and 3.6)
-cost = getobjectivevalue(model)
+cost = objective_value(model)
 nonints = [val for val in 1:n if !(val in ints)]
 plot_model, x, y = facility_model(c, f)
 @constraint(plot_model, x[ints] .== 1)
@@ -196,11 +201,11 @@ for k=1:length(R_Ds)
     push!(df, Dict("R_D" => R_Ds[k],
                      "sumP" => sum(P),
                      "Gamma" => Gamm,
-                     "f+c" => getobjectivevalue(model),   
-                     "f" => getvalue(sum(f[j] * x[j] for j = 1:n)),
-                     "c" => getvalue(sum(c[i, j] * y[i, j] for i=1:n, j=1:m)),
+                     "f+c" => objective_value(model),   
+                     "f" => value(sum(f[j] * x[j] for j = 1:n)),
+                     "c" => value(sum(c[i, j] * y[i, j] for i=1:n, j=1:m)),
                      "nP" => sum(P .> 0),
-                     "nx" => sum(getvalue(x))))
+                     "nx" => sum(value(x))))
 end
 
 # Column-wise scaled P (3.7)
@@ -219,9 +224,9 @@ for k=1:length(R_Ds)
     push!(df, Dict("R_D" => R_Ds[k],
                      "sumP" => sum(P),
                      "Gamma" => Gamm,
-                     "f+c" => getobjectivevalue(model),   
-                     "f" => getvalue(sum(f[j] * x[j] for j = 1:n)),
-                     "c" => getvalue(sum(c[i, j] * y[i, j] for i=1:n, j=1:m)),
+                     "f+c" => objective_value(model),   
+                     "f" => value(sum(f[j] * x[j] for j = 1:n)),
+                     "c" => value(sum(c[i, j] * y[i, j] for i=1:n, j=1:m)),
                      "nP" => sum(P .> 0),
-                     "nx" => sum(getvalue(x))))
+                     "nx" => sum(value.(x))))
 end
