@@ -1,11 +1,9 @@
 # Activating Julia environment
 using Pkg
 Pkg.activate(".")
-import Pkg
-Pkg.add(Pkg.PackageSpec(name = "CPLEX", version = v"0.6"))
 
 # Packages
-using JuMP, JuMPeR, CPLEX, Random, Distributions, LinearAlgebra, Plots
+using JuMP, Gurobi, Random, Distributions, LinearAlgebra, Plots
 
 T = 25
 S = 5
@@ -48,26 +46,48 @@ C = [0.4, 0.5, 0.6, 0.7, 0.8, 0.7]; # reallocation costs
 #         title = "Costs for each resource")
 
 # OPTIMIZATION MODEL HERE.
-m = RobustModel(solver = CPLEX.Optimizer)
-Γ = 0
-# Γ = sqrt(2log(1/0.05))*sqrt(I*T)
+m = JuMP.Model(Gurobi.Optimizer)
 @variable(m, r[i=1:I, s=1:S] >= 0)
 @variable(m, e[i=1:I, s=1:S, t=1:T] >= 0)
 @variable(m, h[s=1:S, t =1:T] >= 0)
 @variable(m, u[i=1:I, s1=1:S, s2=1:S, t=1:T] >= 0)
-@uncertain(m, -1 <= d[i=1:I, s=1:S, t =1:T] <= 1)
-for s=1:S
-    @constraint(m, norm(d[:, s, :], 1) <= Γ)
-end
+
+# Demand uncertainty is described by: 
+# @uncertain(m, d[i=1:I, s=1:S, t =1:T])
+# for s=1:S
+#     @constraint(m, norm(d[:, s, :], 1) <= Γ)
+# end
+# Which is a budget uncertainty with ρ = 1 for the ∞ norm, and γ bounding the 1-norm.
+# ρ = 0
+# Γ = 0
+ρ = 1
+Γ = sqrt(2log(1/0.05))*sqrt(I*T)
 
 @objective(m, Min, T*sum(sum(F .* r[:, s]) for s=1:S) + 
                 sum(sum(sum(V .* e[:, s, t]) for s=1:S) for t=1:T) + 
                 sum(sum(sum(sum(C .* u[:,s1,s2,t]) for s1=1:S) for s2=1:S) for t=1:T));
+
+# Using the robust counterpart here
 for i = 1:I
     for s = 1:S
-        for t = 1:T #
-            @constraint(m, D[i,s,t] + d[i,s,t] + sum(u[i, s2, s, t] for s2 = 1:S) <= 
-                r[i,s] + e[i,s,t] + sum(u[i, s, s2, t] for s2 = 1:S))
+        for t = 1:T 
+            y = @variable(m, [j=1:I, k=1:T])
+            abs_y = @variable(m, [j=1:I, k=1:T])
+            max_diff = @variable(m)
+            @constraint(m, abs_y .≥ y)
+            @constraint(m, abs_y .≥ -y)
+            for j = 1:I # The right hand side uncertainty can be tricky!
+                for k = 1:T
+                    if j == i && k == t
+                        @constraint(m, max_diff ≥ (-1 + y[j,k]))
+                        @constraint(m, max_diff ≥ -(-1 + y[j,k]))
+                    else
+                        @constraint(m, max_diff ≥ y[j,k])
+                        @constraint(m, max_diff ≥ -y[j,k])
+                    end
+                end
+            end
+            @constraint(m, D[i,s,t] + ρ*sum(abs_y) + Γ*max_diff + sum(u[i, s2, s, t] for s2 = 1:S) <= r[i,s] + e[i,s,t] + sum(u[i, s, s2, t] for s2 = 1:S))
         end
     end
 end
@@ -82,34 +102,36 @@ for s = 1:S
         @constraint(m, h[s, t] <= 1)
     end
 end
-solve(m)
+optimize!(m)
 
 # Fixed capacities plot
-heatmap(getvalue(r)', xlabel = "Resources", ylabel = "Servers", title = "Fixed capacities")
+plt1 = heatmap(value.(r)', xlabel = "Resources", ylabel = "Servers", title = "Fixed capacities")
 
 # Time-mean of expansions plot
-heatmap(mean(getvalue(e), dims=3)[:,:,1]', xlabel = "Resources", 
+plt2 = heatmap(mean(value.(e), dims=3)[:,:,1]', xlabel = "Resources", 
         ylabel = "Servers", title = "Time-mean of expansions")
 
 # Time-variance of expansions
-heatmap(var(getvalue(e), dims=3)[:,:,1]', xlabel = "Resources", 
+plt3 = heatmap(var(value.(e), dims=3)[:,:,1]', xlabel = "Resources", 
 ylabel = "Servers", title = "Time-variance of expansions")
 
 # Time-mean of job transfers out
 transfers_out = zeros(I,S,T); # Computing the transfers out of each server
-[transfers_out[i,s,t] = sum(getvalue(u)[i, s, :, t]) for i=1:I, s = 1:S, t = 1:T];
-heatmap(mean(transfers_out, dims=3)[:,:,1]', xlabel = "Resources", 
+[transfers_out[i,s,t] = sum(value.(u)[i, s, :, t]) for i=1:I, s = 1:S, t = 1:T];
+plt4 = heatmap(mean(transfers_out, dims=3)[:,:,1]', xlabel = "Resources", 
         ylabel = "Servers", title = "Time-mean of job transfers out")
 
 # Time-variance of job transfers out
-heatmap(var(transfers_out, dims=3)[:,:,1]', xlabel = "Resources", 
+plt5 = heatmap(var(transfers_out, dims=3)[:,:,1]', xlabel = "Resources", 
 ylabel = "Servers", title = "Time-variance of job transfers out")
 
 # Plots of temperature
-temps = getvalue(h)
-plt = plot(1:T, temps[1,:], label=1)
+temps = value.(h)
+plt6 = plot(1:T, temps[1,:], label=1)
 for s=2:S
     plot!(1:T, temps[s,:], label=s, title = "Server temperatures", xlabel = "Time period (t)", ylabel = "Temperature", 
         legend = :bottomright)
 end
-display(plt)
+
+# Displaying
+display(plt6)
