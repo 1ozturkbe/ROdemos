@@ -1,25 +1,4 @@
-# Activating Julia environment
-using Pkg
-Pkg.activate(".")
-
-# Packages
-using JuMP, Gurobi, Random, Distributions, LinearAlgebra, DataFrames, Plots
-
-n = 10 # Number of facilities
-m = 50 # Number of customers
-
-# Generating random data (please don't change the seeds.)
-facilities = 0.6.*rand(MersenneTwister(5), n,2) .+ 0.2;
-customers = rand(MersenneTwister(2), m, 2); 
-c = [LinearAlgebra.norm(customers[i, :] .- facilities[j, :])[1] for j=1:n, i=1:m];
-f = rand(MersenneTwister(3), n)*1 .+ 5;
-s = rand(MersenneTwister(4), n)*2 .+ 15;
-d = rand(MersenneTwister(5), m)*0.5 .+ 0.75
-
-# P matrix
-R_D = 0.25
-P = [0.2*exp(-1/R_D .*LinearAlgebra.norm(customers[i, :] .- customers[j, :])[1]) for j=1:m, i=1:m];
-P = (P .>= 0.2*exp(-1/R_D .* R_D)) .* P 
+include("utils.jl")
 
 """ Cutting plane facility location model. 
     Note this is just the nominal problem, but with linear policies y(z) = u + Vz when z = 0. """
@@ -58,7 +37,7 @@ function apply_heuristic(model, x, u, V)
 end
 
 """ Finds and adds worst case cuts for the facility location problem. """
-function find_wc_cuts(model, x, u, V, xvals, uvals, Vvals, rho, Gamm)
+function find_wc_cuts(model, x, u, V, xvals, uvals, Vvals, rho, Gamm, atol = 1e-5)
     obj_value = objective_value(model)
     wc_model = Model(Gurobi.Optimizer)
     set_optimizer_attribute(wc_model, "OutputFlag", 0) # suppressing printouts.
@@ -73,7 +52,7 @@ function find_wc_cuts(model, x, u, V, xvals, uvals, Vvals, rho, Gamm)
         for j=1:m
             @objective(wc_model, Min, uvals[i,j] + sum(Vvals[i,j,:] .* z))
             optimize!(wc_model)
-            if objective_value(wc_model) < -1e-5 # if constraint is violated
+            if objective_value(wc_model) < -atol # if constraint is violated
                 new_z = value.(z)
                 @constraint(model, u[i,j] + sum(V[i,j,:] .* new_z) >= 0)
                 count += 1
@@ -87,7 +66,7 @@ function find_wc_cuts(model, x, u, V, xvals, uvals, Vvals, rho, Gamm)
         [dt[i,j] = 1 for i=1:n];
         @objective(wc_model, Min, sum(dt .* uvals) + sum(Vvals[:,j,:] * z) - d[j] - (P*z)[j])
         optimize!(wc_model)
-        if objective_value(wc_model) < -1e-5 # if constraint is violated
+        if objective_value(wc_model) < -atol # if constraint is violated
             new_z = value.(z)
             @constraint(model, sum(dt .* u) + sum(V[:,j,:] * new_z) >= d[j] + (P*new_z)[j])
             count += 1
@@ -100,7 +79,7 @@ function find_wc_cuts(model, x, u, V, xvals, uvals, Vvals, rho, Gamm)
         [dt[i,j] = 1 for j=1:m];
         @objective(wc_model, Min, - sum(dt .* uvals) - sum(Vvals[i,:,:] * z) + s[i] * xvals[i])
         optimize!(wc_model)
-        if objective_value(wc_model) < -1e-5 # if constraint is violated
+        if objective_value(wc_model) < -atol # if constraint is violated
             new_z = value.(z)
             @constraint(model, sum(dt .* u) + sum(V[i,:,:] * new_z) <= s[i] * x[i])
             count += 1
@@ -111,7 +90,7 @@ function find_wc_cuts(model, x, u, V, xvals, uvals, Vvals, rho, Gamm)
     # objective
     @objective(wc_model, Max, sum(f[j] * xvals[j] for j = 1:n) + sum(c[i, j] * (uvals[i, j] + sum(Vvals[i,j,:] .* z)) for i=1:n, j=1:m))
     optimize!(wc_model)
-    if objective_value(wc_model) > obj_value + 1e-5 # if constraint is violated
+    if objective_value(wc_model) > obj_value + atol # if constraint is violated
         new_z = value.(z)
         @constraint(model, objective_function(model) >= sum(f[j] * x[j] for j = 1:n) + sum(c[i, j] * (u[i, j] + sum(V[i,j,:] .* new_z)) for i=1:n, j=1:m))
         count += 1
@@ -120,45 +99,21 @@ function find_wc_cuts(model, x, u, V, xvals, uvals, Vvals, rho, Gamm)
     return count
 end
 
-""" Plots the solution of the facility location model. 
-Blue circles are active facilities with different capacities.
-Orange plus signs are other potential facility locations.
-Rays describe connections between facilities and demand nodes. 
-"""
-function plot_solution(model, x, y, cost = nothing)
-    plt = scatter(facilities[:, 1], facilities[:, 2], markersize = 0.4 .* s .* value.(x))
-    scatter!(facilities[:, 1], facilities[:, 2], markersize = 0.4 .* s, markershape = :+)
-    for i=1:n
-        for j=1:m
-            if value(y[i,j]) >= 1e-10
-                plot!([customers[j, 1], facilities[i,1]], [customers[j,2], facilities[i,2]], linewidth = value(y[i,j]), legend=false)
-            end
-        end
-    end
-    if cost == nothing
-        scatter!(customers[:, 1], customers[:, 2], markersize = 3*d, 
-                title = "Total cost: $(round(objective_value(model), sigdigits=5))")
-    else
-        scatter!(customers[:, 1], customers[:, 2], markersize = 3*d, 
-        title = "Total cost: $(round(cost,sigdigits=5))")
-    end
-    println("Facility cost: $(value(sum(f[j] * x[j] for j = 1:n)))")
-    println("Transportation cost: $(value(sum(c[i, j] * y[i, j] for i=1:n, j=1:m)))")
-    return plt
-end
-
 rho = 1
 Gamm = 5
 model, x, u, V = CP_facility_model(c, f)
+unset_binary.(x) # First solve a relaxation of the problem.
 apply_heuristic(model, x, u, V)
 optimize!(model)
 
-# Do 15 iterations of cuts
-for i=1:15
+# Do 25 iterations of the relaxed problem, and then tighten binary variables. 
+for i=1:30
     @info("Iteration $(i).")
     xvals, uvals, Vvals = value.(x), value.(u), value.(V)
     count = find_wc_cuts(model, x, u, V, xvals, uvals, Vvals , rho, Gamm)
-    set_start_value.(x, xvals) # Warmstarts
+    if i == 25
+        set_binary.(x)
+    end
     if count == 0
         @info("Optimum reached.")
         @info("Optimal cost:$(objective_value(model)).")
