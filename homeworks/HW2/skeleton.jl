@@ -1,4 +1,9 @@
-using JuMP, JuMPeR, Gurobi, Random, Distributions, LinearAlgebra, Plots, StatsPlots
+# Activating Julia environment
+using Pkg
+Pkg.activate(".")
+
+# Packages
+using JuMP, Gurobi, Random, Distributions, LinearAlgebra, Plots
 
 T = 25
 S = 5
@@ -34,43 +39,45 @@ heatmap(1:I, 1:S, mean(D, dims=3)[:,:,1], xlabel = "Resources", ylabel = "Server
 V = 2*[1.5, 1.3, 0.8, 1.3, 1.2, 0.5]; # expansion costs
 F = [1.5, 1.3, 0.8, 1.3, 1.2, 0.9]; # fixed costs
 C = [0.4, 0.5, 0.6, 0.7, 0.8, 0.7]; # reallocation costs 
-bardata = hcat(V, F, C)
-sx = repeat(["expansion", "fixed", "reallocation"], inner = 6)
-nam = repeat("Resource " .* string.(1:I), outer = 3)
-groupedbar(nam, bardata, group = sx, ylabel = "Costs", 
-        title = "Costs for each resource")
+# bardata = hcat(V, F, C)
+# sx = repeat(["expansion", "fixed", "reallocation"], inner = 6)
+# nam = repeat("Resource " .* string.(1:I), outer = 3)
+# groupedbar(nam, bardata, group = sx, ylabel = "Costs", 
+#         title = "Costs for each resource")
 
 # OPTIMIZATION MODEL HERE.
-m = RobustModel(solver = GurobiSolver())
-# ...
-solve(m)
+m = JuMP.Model(Gurobi.Optimizer)
+...
+optimize!(m)
 
 # Fixed capacities plot
-heatmap(getvalue(r)', xlabel = "Resources", ylabel = "Servers", title = "Fixed capacities")
+plt1 = heatmap(getvalue.(r)', xlabel = "Resources", ylabel = "Servers", title = "Fixed capacities")
 
 # Time-mean of expansions plot
-heatmap(mean(getvalue(e), dims=3)[:,:,1]', xlabel = "Resources", 
+plt2 = heatmap(mean(getvalue.(e), dims=3)[:,:,1]', xlabel = "Resources", 
         ylabel = "Servers", title = "Time-mean of expansions")
 
 # Time-variance of expansions
-heatmap(var(getvalue(e), dims=3)[:,:,1]', xlabel = "Resources", 
+plt3 = heatmap(var(getvalue.(e), dims=3)[:,:,1]', xlabel = "Resources", 
 ylabel = "Servers", title = "Time-variance of expansions")
 
 # Time-mean of job transfers out
 transfers_out = zeros(I,S,T); # Computing the transfers out of each server
-[transfers_out[i,s,t] = sum(getvalue(u)[i, s, :, t]) for i=1:I, s = 1:S, t = 1:T];
-heatmap(mean(transfers_out, dims=3)[:,:,1]', xlabel = "Resources", 
+[transfers_out[i,s,t] = sum(getvalue.(u)[i, s, :, t]) for i=1:I, s = 1:S, t = 1:T];
+plt4 = heatmap(mean(transfers_out, dims=3)[:,:,1]', xlabel = "Resources", 
         ylabel = "Servers", title = "Time-mean of job transfers out")
 
 # Time-variance of job transfers out
-heatmap(var(transfers_out, dims=3)[:,:,1]', xlabel = "Resources", 
+plt5 = heatmap(var(transfers_out, dims=3)[:,:,1]', xlabel = "Resources", 
 ylabel = "Servers", title = "Time-variance of job transfers out")
 
 # Plots of temperature
-temps = getvalue(h)
-plt = plot(1:T, temps[1,:], label=1)
+temps = getvalue.(h)
+plt6 = plot(1:T, temps[1,:], label=1)
 for s=2:S
     plot!(1:T, temps[s,:], label=s, title = "Server temperatures", xlabel = "Time period (t)", ylabel = "Temperature", 
         legend = :bottomright)
 end
-display(plt)
+
+# Displaying
+display(plt6)

@@ -1,6 +1,10 @@
-# include("homeworks/HW3/HW3_WFP_Solution.jl")
+# Activating Julia environment
+using Pkg
+Pkg.activate(".")
 
-using JuMP, Gurobi, Random, Distributions, LinearAlgebra, Plots, CSV, DataFrames
+# Packages
+using JuMP, MathOptInterface, Gurobi, Random, Distributions, LinearAlgebra, CSV, DataFrames
+MOI = MathOptInterface
 
 # CRUNCHING THE DATA (just like in lecture)
 # NODES (I = International supplier; R = Regional supplier; L = Local market (both supply and deliver); D = delivery point)
@@ -10,7 +14,7 @@ N_R = []     # set of regional suppliers
 N_L = []     # set of local markets
 N_D = []     # delivery points
 dem = Dict() # set of demands
-file = CSV.File("homeworks/HW3/syria_nodes.csv")
+file = CSV.File("syria_nodes.csv")
 for row in file
     push!(N, row.Name)
     if !ismissing(row.Demand)
@@ -30,17 +34,18 @@ for row in file
 end
 
 # EDGES
-hc = DataFrame(CSV.File("homeworks/HW3/syria_edges.csv"))
+hc = DataFrame(CSV.File("syria_edges.csv"))
 
 # FOOD NUTRITION AND INTERNATIONAL COSTS
-fooddata = DataFrame(CSV.File("homeworks/HW3/syria_foodnutrition.csv"))
+fooddata = DataFrame(CSV.File("syria_foodnutrition.csv"))
 intfoodcosts = select(fooddata, [:Food, :InternationalPrice])
 commodities = sort(Array(intfoodcosts.Food)) # Commodities
 select!(fooddata, Not([14,15]))
 fooddata = Dict(fooddata.Food .=> eachrow(fooddata))
 
 # FOOD COST ($/metric ton for regional suppliers)
-pc = DataFrame(CSV.File("homeworks/HW3/syria_foodcost.csv"))
+pc = DataFrame(CSV.File("syria_foodcost.csv"))
+pc.Food = convert.(String63, pc.Food)
 for int_supply_node in N_I # adding international prices to pc for easier processing
     for row in eachrow(intfoodcosts)
         append!(pc, DataFrame(:A => N_I, :Food => row.Food, :Price => row.InternationalPrice))
@@ -51,7 +56,7 @@ international_items = DataFrame([r for r in eachrow(pc) if r.A in N_I])
 regional_items =  DataFrame([r for r in eachrow(pc) if r.A in N_R])
 
 # FOOD REQUIREMENTS (avg. per person per day)
-foodreqs = DataFrame(CSV.File("homeworks/HW3/syria_foodreq.csv"))
+foodreqs = DataFrame(CSV.File("syria_foodreq.csv"))
 select!(foodreqs, Not(:Type))
 nutrients = String.(propertynames(foodreqs))
 foodreqs = Dict(string(pptname) => foodreqs[1, pptname] for pptname in propertynames(foodreqs))
@@ -59,7 +64,7 @@ foodreqs = Dict(string(pptname) => foodreqs[1, pptname] for pptname in propertyn
 
 function WFP_model(slack::Union{Nothing, Real} = 1, pof::Real = 0.5)
     # FINALLY CREATING THE MODEL
-    m = Model(solver = GurobiSolver())
+    m = Model(Gurobi.Optimizer)
     m[:pof] = pof
     normalquant = quantile(Normal(0,1), pof)
 
@@ -82,8 +87,11 @@ function WFP_model(slack::Union{Nothing, Real} = 1, pof::Real = 0.5)
                                     0.05*sum(cr.Price*procurement[cr.A, cr.Food] for cr in eachrow(pc) if cr.A == r.A))
             end
         end
-        @constraint(m, procurement_cost >= normalquant * norm(proccert, 2) + 
-                sum(r[:Price] * procurement[r.A, r.Food] for r in eachrow(pc)))
+        @constraint(m, [1/normalquant*(procurement_cost - sum(r[:Price] * procurement[r.A, r.Food] for r in eachrow(pc))),
+                        proccert...] in MOI.SecondOrderCone(length(proccert) + 1)) 
+        # Equivalent constraint in understandable format
+        # @constraint(m, procurement_cost >= normalquant * norm(proccert, 2) + 
+        #         sum(r[:Price] * procurement[r.A, r.Food] for r in eachrow(pc)))
     end
 
     # Transportation
@@ -153,21 +161,21 @@ end
 
 function report_results(m)
     return DataFrame("PP" => m[:pof],
-                     "TotalCost" => round(getvalue(m[:procurement_cost] + m[:transportation_cost]), sigdigits = 5),
-                     "Proc/Total" => round(getvalue(m[:procurement_cost]) / getvalue(m[:procurement_cost] + m[:transportation_cost]), sigdigits=3),
-                     "Trans/Total" => round(getvalue(m[:transportation_cost]) / getvalue(m[:procurement_cost] + m[:transportation_cost]), sigdigits=3),
-                     "Intl/TotalProc" => round(getvalue(m[:international_p_costs]) / getvalue(m[:procurement_cost]), sigdigits=3), 
-                     "Slack" =>  round(getvalue(m[:nutrient_slack]), sigdigits = 3),
-                     "Cost/Person" => round(getvalue(m[:procurement_cost] + m[:transportation_cost]) / 
-                                        (getvalue(m[:nutrient_slack]) * sum(values(dem))), sigdigits=5),
-                     "NumActiveProc" => sum(values(getvalue(m[:procurement]).tupledict) .> 1e-3),
-                     "NumActiveTrans" => sum(values(getvalue(m[:transportation]).tupledict) .> 1e-3))  
+                     "TotalCost" => round(value(m[:procurement_cost] + m[:transportation_cost]), sigdigits = 5),
+                     "Proc/Total" => round(value(m[:procurement_cost]) / value(m[:procurement_cost] + m[:transportation_cost]), sigdigits=3),
+                     "Trans/Total" => round(value(m[:transportation_cost]) / value(m[:procurement_cost] + m[:transportation_cost]), sigdigits=3),
+                     "Intl/TotalProc" => round(value(m[:international_p_costs]) / value(m[:procurement_cost]), sigdigits=3), 
+                     "Slack" =>  round(value(m[:nutrient_slack]), sigdigits = 3),
+                     "Cost/Person" => round(value(m[:procurement_cost] + m[:transportation_cost]) / 
+                                        (value(m[:nutrient_slack]) * sum(values(dem))), sigdigits=5),
+                     "NumActiveProc" => sum(values(value.(m[:procurement])) .> 1e-3),
+                     "NumActiveTrans" => sum(values(value.(m[:transportation])) .> 1e-3))  
 end
 
 
 # Solving nominal problem
 m = WFP_model(1)
-solve(m);
+optimize!(m);
 report_results(m)
 
 # Maximizing nutrition (optimal solution just scales the nutrition)
@@ -175,7 +183,7 @@ nm = WFP_model(nothing, 0.5)
 # set_optimizer_attribute_(nm, "OptimalityTol", 1e-8)
 @constraint(nm, nm[:procurement_cost] + nm[:transportation_cost] <= 6000)
 @objective(nm, Max, nm[:nutrient_slack])
-solve(nm);
+optimize!(nm);
 report_results(nm)
 
 # Robust solutions with a budget limit
@@ -185,18 +193,18 @@ for pof in pofs
     m_lim = WFP_model(nothing, pof)
     @constraint(m_lim, m_lim[:procurement_cost] + m_lim[:transportation_cost] <= 6000)
     @objective(m_lim, Max, m_lim[:nutrient_slack])
-    solve(m_lim);
+    optimize!(m_lim);
     df = report_results(m_lim)
     append!(robustdata_lim, df)
 end
 
 # Robust solutions without a budget limit
 m_unlim = WFP_model(1)
-solve(m_unlim);
+optimize!(m_unlim);
 robustdata_unlim = report_results(m_unlim)
 for pof in pofs
     m_unlim = WFP_model(1, pof)
-    solve(m_unlim);
+    optimize!(m_unlim);
     df = report_results(m_unlim)
     append!(robustdata_unlim, df)
 end
