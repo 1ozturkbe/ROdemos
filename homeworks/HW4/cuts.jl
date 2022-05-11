@@ -1,11 +1,11 @@
 include("utils.jl")
 
 """ Cutting plane facility location model. 
-    Note this is just the nominal problem, but with linear policies y(z) = u + Vz when z = 0. """
+    Note this is just the nominal problem, but with linear policies y(z) = u + Vz. """
 function CP_facility_model(c::Matrix, f::Vector)
     n, m = size(c) 
     @assert length(f) == n
-    model = Model(Gurobi.Optimizer)
+    model = Model(GLPK.Optimizer)
 
     # VARIABLES
     @variable(model, x[1:n], Bin)     # Facility locations
@@ -37,10 +37,9 @@ function apply_heuristic(model, x, u, V)
 end
 
 """ Finds and adds worst case cuts for the facility location problem. """
-function find_wc_cuts(model, x, u, V, xvals, uvals, Vvals, rho, Gamm, atol = 1e-5)
+function find_wc_cuts(model, x, u, V, xvals, uvals, Vvals, rho, Gamm, atol = 1e-2)
     obj_value = objective_value(model)
-    wc_model = Model(Gurobi.Optimizer)
-    set_optimizer_attribute(wc_model, "OutputFlag", 0) # suppressing printouts.
+    wc_model = Model(GLPK.Optimizer)
     @variable(wc_model, -rho <= z[1:m] <= rho)
     @variable(wc_model, normdummy[1:m] >= 0)
     @constraint(wc_model, [i=1:m], normdummy[i] >= z[i])
@@ -107,7 +106,7 @@ apply_heuristic(model, x, u, V)
 optimize!(model)
 
 # Do 25 iterations of the relaxed problem, and then tighten binary variables. 
-for i=1:30
+for i=1:100
     @info("Iteration $(i).")
     xvals, uvals, Vvals = value.(x), value.(u), value.(V)
     count = find_wc_cuts(model, x, u, V, xvals, uvals, Vvals , rho, Gamm)
@@ -121,7 +120,6 @@ for i=1:30
     end
     optimize!(model)
 end
-
 # Problem should converge in ~100 adversarial iterations. 
-
-plot_solution(model, x, u)
+xvals, uvals, Vvals = value.(x), value.(u), value.(V)
+plot_solution(model, xvals, uvals)

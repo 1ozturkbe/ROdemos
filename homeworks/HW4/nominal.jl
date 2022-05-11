@@ -4,7 +4,7 @@ include("utils.jl")
 function facility_model(c::Matrix, f::Vector)
     n, m = size(c) 
     @assert length(f) == n
-    model = Model(Gurobi.Optimizer)
+    model = Model(GLPK.Optimizer)
 
     # VARIABLES
     @variable(model, x[1:n], Bin)      # Facility locations
