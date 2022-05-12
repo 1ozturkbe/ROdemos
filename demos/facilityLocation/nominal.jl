@@ -1,5 +1,3 @@
-include("utils.jl")
-
 """ Nominal facility location model. """
 function facility_model(c::Matrix, f::Vector)
     n, m = size(c) 
@@ -17,9 +15,3 @@ function facility_model(c::Matrix, f::Vector)
             sum(f[j] * x[j] for j = 1:n) + sum(c[i, j] * y[i, j] for i=1:n, j=1:m))
     return model, x, y
 end
-
-model, x, y = facility_model(c, f)
-
-optimize!(model)
-
-plt = plot_solution(model, x, y)

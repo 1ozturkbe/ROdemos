@@ -6,8 +6,8 @@ include("utils.jl")
 function adaptive_facility_model(c::Matrix, f::Vector, rho::Real, Gamm::Real)
     n, m = size(c) 
     @assert length(f) == n
-    model = Model(optimizer_with_attributes(GLPK.Optimizer, "msg_lev" => GLPK.GLP_MSG_ALL))
-        
+    model = Model(Gurobi.Optimizer)
+
     # VARIABLES 
     @variable(model, x[1:n], Bin)           # Facility locations
     @variable(model, V[1:n, 1:m, 1:m] >= 0) # Affine policy w.r.t each z

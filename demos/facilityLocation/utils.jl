@@ -1,26 +1,3 @@
-# Activating Julia environment
-using Pkg
-Pkg.activate(".")
-
-# Packages
-using JuMP, GLPK, Random, Distributions, LinearAlgebra, DataFrames, PyPlot
-
-n = 10 # Number of facilities
-m = 50 # Number of customers
-
-# Generating random data (please don't change the seeds.)
-facilities = 0.6.*rand(MersenneTwister(5), n,2) .+ 0.2;
-customers = rand(MersenneTwister(2), m, 2); 
-c = [LinearAlgebra.norm(customers[i, :] .- facilities[j, :])[1] for j=1:n, i=1:m];
-f = rand(MersenneTwister(3), n)*1 .+ 5;
-s = rand(MersenneTwister(4), n)*2 .+ 15;
-d = rand(MersenneTwister(5), m)*0.5 .+ 0.75
-
-# P matrix
-R_D = 0.25
-P = [0.2*exp(-1/R_D .*LinearAlgebra.norm(customers[i, :] .- customers[j, :])[1]) for j=1:m, i=1:m];
-P = (P .>= 0.2*exp(-1/R_D .* R_D)) .* P 
-
 """ Plots the solution of the facility location model. 
 Blue circles are active facilities with different capacities.
 Orange plus signs are other potential facility locations.
