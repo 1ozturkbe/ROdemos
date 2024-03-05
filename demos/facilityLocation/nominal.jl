@@ -1,8 +1,8 @@
 """ Nominal facility location model. """
-function facility_model(c::Matrix, f::Vector)
+function facility_model(c::Matrix, f::Vector, optimizer=GLPK.Optimizer)
     n, m = size(c) 
     @assert length(f) == n
-    model = Model(GLPK.Optimizer)
+    model = Model(optimizer)
 
     # VARIABLES
     @variable(model, x[1:n], Bin)      # Facility locations

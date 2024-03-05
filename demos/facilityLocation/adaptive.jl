@@ -3,10 +3,10 @@ include("utils.jl")
 """ Adaptive facility location model, with JuMP using robust counterpart,
     under budget uncertainty. 
     Note: We restrict u and V to be elementwise positive, for tractability! """
-function adaptive_facility_model(c::Matrix, f::Vector, rho::Real, Gamm::Real)
+function adaptive_facility_model(c::Matrix, f::Vector, rho::Real, Gamm::Real, optimizer=GLPK.Optimizer)
     n, m = size(c) 
     @assert length(f) == n
-    model = Model(Gurobi.Optimizer)
+    model = Model(optimizer)
 
     # VARIABLES 
     @variable(model, x[1:n], Bin)           # Facility locations
@@ -65,11 +65,3 @@ function adaptive_facility_model(c::Matrix, f::Vector, rho::Real, Gamm::Real)
     @objective(model, Min, F)
     return model, x, u, V
 end
-
-# Adaptive model through robust counterpart
-rho = 1
-Gamm = 5
-model, x, u, V = adaptive_facility_model(c, f, rho, Gamm)
-@time optimize!(model)
-plt = plot_solution(model, x, u)
-@show plt

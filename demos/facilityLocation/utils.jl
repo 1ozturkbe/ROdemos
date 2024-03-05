@@ -4,7 +4,7 @@ Orange plus signs are other potential facility locations.
 Rays describe connections between facilities and demand nodes. 
 """
 function plot_solution(model, x, y, cost = nothing)
-    plt = scatter(facilities[:, 1], facilities[:, 2], s = 0.4 .* s .* value.(x))
+    scatter(facilities[:, 1], facilities[:, 2], s = 0.4 .* s .* value.(x))
     scatter(facilities[:, 1], facilities[:, 2], s = 0.4 .* s, marker = :+)
     for i=1:n
         for j=1:m
@@ -16,11 +16,13 @@ function plot_solution(model, x, y, cost = nothing)
     end
     if isnothing(cost)
         scatter(customers[:, 1], customers[:, 2], s = 3*d)
-        title("Total cost: $(round(objective_value(model), sigdigits=5))")
+        title("Total cost: $(round(objective_value(model), digits=2))")
     else
         scatter(customers[:, 1], customers[:, 2], s = 3*d)
-        title("Total cost: $(round(cost,sigdigits=5))")
+        title("Total cost: $(round(cost, digits=2))")
     end
-    println("Facility cost: $(value(sum(f[j] * x[j] for j = 1:n)))")
-    println("Transportation cost: $(value(sum(c[i, j] * y[i, j] for i=1:n, j=1:m)))")
+    fac_cost = value(sum(f[j] * x[j] for j = 1:n))
+    trans_cost = value(sum(c[i, j] * y[i, j] for i=1:n, j=1:m))
+    println("Facility cost: $(round(fac_cost, digits=2))")
+    println("Transportation cost: $(round(trans_cost, digits=2))")
 end

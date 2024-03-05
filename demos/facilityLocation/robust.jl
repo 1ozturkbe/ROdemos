@@ -1,8 +1,8 @@
 """ Robust facility location model, with JuMP using the robust counterpart. """
-function robust_facility_model(c::Matrix, f::Vector, rho::Real, Gamm::Real)
+function robust_facility_model(c::Matrix, f::Vector, rho::Real, Gamm::Real, optimizer=GLPK.Optimizer)
     n, m = size(c) 
     @assert length(f) == n
-    model = Model(GLPK.Optimizer)
+    model = Model(optimizer)
 
     # VARIABLES
     @variable(model, x[1:n], Bin)                 # Facility locations
