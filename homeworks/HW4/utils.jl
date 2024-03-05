@@ -3,7 +3,7 @@ using Pkg
 Pkg.activate(".")
 
 # Packages
-using JuMP, Gurobi, Random, Distributions, LinearAlgebra, DataFrames, Plots
+using JuMP, GLPK, Random, Distributions, LinearAlgebra, DataFrames, PyPlot
 
 n = 10 # Number of facilities
 m = 50 # Number of customers
@@ -27,23 +27,23 @@ Orange plus signs are other potential facility locations.
 Rays describe connections between facilities and demand nodes. 
 """
 function plot_solution(model, x, y, cost = nothing)
-    plt = scatter(facilities[:, 1], facilities[:, 2], markersize = 0.4 .* s .* value.(x))
-    scatter!(facilities[:, 1], facilities[:, 2], markersize = 0.4 .* s, markershape = :+)
+    plt = scatter(facilities[:, 1], facilities[:, 2], s = 0.4 .* s .* value.(x))
+    scatter(facilities[:, 1], facilities[:, 2], s = 0.4 .* s, marker = :+)
     for i=1:n
         for j=1:m
             if value(y[i,j]) >= 1e-10
-                plot!([customers[j, 1], facilities[i,1]], [customers[j,2], facilities[i,2]], linewidth = value(y[i,j]), legend=false)
+                plot([customers[j, 1], facilities[i,1]], [customers[j,2], facilities[i,2]], 
+                    linewidth = value(y[i,j]))
             end
         end
     end
-    if cost == nothing
-        scatter!(customers[:, 1], customers[:, 2], markersize = 3*d, 
-                title = "Total cost: $(round(objective_value(model), sigdigits=5))")
+    if isnothing(cost)
+        scatter(customers[:, 1], customers[:, 2], s = 3*d)
+        title("Total cost: $(round(objective_value(model), sigdigits=5))")
     else
-        scatter!(customers[:, 1], customers[:, 2], markersize = 3*d, 
-        title = "Total cost: $(round(cost,sigdigits=5))")
+        scatter(customers[:, 1], customers[:, 2], s = 3*d)
+        title("Total cost: $(round(cost,sigdigits=5))")
     end
     println("Facility cost: $(value(sum(f[j] * x[j] for j = 1:n)))")
     println("Transportation cost: $(value(sum(c[i, j] * y[i, j] for i=1:n, j=1:m)))")
-    return plt
 end

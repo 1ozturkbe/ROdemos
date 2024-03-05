@@ -4,9 +4,8 @@ include("utils.jl")
 function facility_model(c::Matrix, f::Vector)
     n, m = size(c) 
     @assert length(f) == n
-    model = Model(Gurobi.Optimizer)
-    set_optimizer_attribute(model, "OutputFlag", 0)
-
+    model = Model(GLPK.Optimizer)
+    
     # VARIABLES
     @variable(model, x[1:n], Bin)      # Facility locations
     @variable(model, y[1:n, 1:m] >= 0) # Flow variables
@@ -23,9 +22,7 @@ end
 function robust_facility_model(c::Matrix, f::Vector, rho::Real, Gamm::Real)
     n, m = size(c) 
     @assert length(f) == n
-    model = Model(Gurobi.Optimizer)
-    set_optimizer_attribute(model, "OutputFlag", 0)
-
+    model = Model(GLPK.Optimizer)
     # VARIABLES
     @variable(model, x[1:n], Bin)                 # Facility locations
     @variable(model, u[1:n, 1:m] >= 0)            # Flow variables
