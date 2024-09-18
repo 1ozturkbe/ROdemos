@@ -1,4 +1,4 @@
-using DataFrames, Distributions, JuMP, Random, LinearAlgebra, Gurobi, Plots
+using DataFrames, Distributions, JuMP, Random, LinearAlgebra, Plots, GLPK
 
 """ Uncorrected, 1d variance function. """
 function var_1d(data)
@@ -28,7 +28,7 @@ end
 function optimized_trial_model(data::Union{Matrix, DataFrame}, n_groups:: Int, n_ppg::Int; 
     target_means::Vector = zeros(size(data, 2)),
     target_variances::Vector = ones(size(data, 2)),
-    regularizer::Real = 0.5, optimizer = Gurobi.Optimizer)
+    regularizer::Real = 0.5, optimizer = GLPK.Optimizer)
     m = Model(optimizer)
     n_people, n_traits = size(data)
     @variable(m, x[i=1:n_people, 1:n_groups], Bin)
@@ -71,9 +71,9 @@ function robust_optimized_trial_model(data::Union{Matrix, DataFrame}, n_groups::
     target_means::Vector = zeros(size(data, 2)),
     target_variances::Vector = ones(size(data, 2)),
     ρ::Real = 1, Γ::Real = size(data, 1)/5, 
-    regularizer::Real = 0.5, optimizer = Gurobi.Optimizer)
+    regularizer::Real = 0.5, optimizer = GLPK.Optimizer)
 
-    rm = Model(Gurobi.Optimizer)
+    rm = Model(GLPK.Optimizer)
     n_people, n_traits = size(data)
     @variable(rm, x[i=1:n_people, 1:n_groups], Bin)
     @variable(rm, μ_p[i=1:n_groups, j=1:n_traits]) # Mean
@@ -198,7 +198,7 @@ function compute_worst_case(rm::JuMP.Model, ctrl_idxs::Vector{Int}, vacc_idxs::V
     n_ppg = length(ctrl_idxs)
     @assert length(ctrl_idxs) == length(vacc_idxs)
     rm_copy = copy(rm)
-    set_optimizer(rm_copy, Gurobi.Optimizer)
+    set_optimizer(rm_copy, GLPK.Optimizer)
     if silent
         set_optimizer_attribute(rm_copy, "OutputFlag", 0)
     end
